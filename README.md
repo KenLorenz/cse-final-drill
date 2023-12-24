@@ -59,3 +59,54 @@ SUBMISSION REQUIREMENTS:
 • Github URL that points to your project repository
 • Provide all of the above links to a Google form provided in our Google classroom post (other forms of submission is
 prohibited).
+
+Project Usage Examples (Postman)
+
+(other tables follow the same url format, just change table name in url as well as columns)
+(XML must follow a format of having a parent tag <!-- "<request>" -->)
+
+creating a car:
+
+http://127.0.0.1:5000/cars/add
+
+{
+    "model_idmodel": 1,
+    "license_num": "ABC123",
+    "cur_mileage": 12345,
+    "engine_size": 90000,
+    "other_car_details": "THIS IS NOT AN UFO"
+}
+
+reading the car table:
+
+http://127.0.0.1:5000/cars?page={insert, optional}
+
+updating a car:
+
+http://127.0.0.1:5000/cars/update?id={specify id here}&format=json
+
+{
+    "model_idmodel": 1,
+    "license_num": "ABC123",
+    "cur_mileage": 12345,
+    "engine_size": 90000,
+    "other_car_details": "THIS IS NOT AN UFO"
+}
+
+http://127.0.0.1:5000/cars/update?id={specify id}&format=xml
+
+<!-- 
+
+<request>
+    <model_idmodel>1</model_idmodel>
+    <license_num>ABC123</license_num>
+    <cur_mileage>12345</cur_mileage>
+    <engine_size>90000</engine_size>
+    <other_car_details>THIS IS NOTTTTTTT AN UFO</other_car_details>
+<request>
+
+ -->
+
+ deleting a car:
+
+ http://127.0.0.1:5000/cars/delete?id={specify id}
