@@ -63,7 +63,7 @@ prohibited).
 Project Usage Examples (Postman)
 
 (other tables follow the same url format, just change table name in url as well as columns)
-(XML must follow a format of having a parent tag <!-- "<request>" -->)
+(XML must follow a format of having a parent tag "<request>")
 
 creating a car:
 
@@ -95,7 +95,7 @@ http://127.0.0.1:5000/cars/update?id={specify id here}&format=json
 
 http://127.0.0.1:5000/cars/update?id={specify id}&format=xml
 
-<!-- 
+
 
 <request>
     <model_idmodel>1</model_idmodel>
@@ -105,7 +105,6 @@ http://127.0.0.1:5000/cars/update?id={specify id}&format=xml
     <other_car_details>THIS IS NOTTTTTTT AN UFO</other_car_details>
 <request>
 
- -->
 
  deleting a car:
 
