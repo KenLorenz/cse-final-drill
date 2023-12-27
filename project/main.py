@@ -4,7 +4,6 @@ import jwt # security
 import xmltodict
 from dict2xml import dict2xml
 from query import *
-from verify import *
 # Manufacturer can't be deleted if related to model, model can't be deleted if related to cars, cars can be deleted immediately.
 
 app = Flask(__name__)
