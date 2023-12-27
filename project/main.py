@@ -3,6 +3,8 @@ import mysql.connector # flask-mysqldb doesnt work, probably because I use perco
 import jwt # security
 import xmltodict
 from dict2xml import dict2xml
+from query import *
+from verify import *
 # Manufacturer can't be deleted if related to model, model can't be deleted if related to cars, cars can be deleted immediately.
 
 app = Flask(__name__)
@@ -20,10 +22,155 @@ sql = mysql.connector.connect(
     database=app.config["MYSQL_DB"]
     )
 
+@app.route("/<string:table>/add",methods=["POST"])
+def create(table): 
+    
+    # phase 1: get format and data in accordance to input
+    format = request.args.get('format',default="json")
+    info = format_get(format) # input request
+
+    if str(info).__contains__("400 BAD REQUEST"):
+        return info
+    
+    # table input validation
+    mysql_cursor = sql.cursor()
+    
+    # checks if table refers to existing table.
+    query_values = fetch_all("show tables;") # returns tuples
+    query_values_list = list()
+    for x in query_values:
+        query_values_list.append(x[0])
+        
+    if table not in query_values_list: # if url value not in available tables
+        mysql_cursor.close()
+        
+        return query_fail_response(format, "Unknown URL, double check. ",404)
+    
+    # phase 2: execute query
+    mysql_cursor.execute(create_query(table,info))
+    
+    # phase 3: apply query and return response
+    sql.commit()
+    rows_affected = mysql_cursor.rowcount
+    mysql_cursor.close()
+    
+    return rows_affected_response(rows_affected,201,400)
+
+@app.route("/<string:table>/read",methods=["GET"])
+def read(table):
+    
+    page = request.args.get('page', default=1)
+    column = request.args.get('field',default="")
+    search = request.args.get('search',default="")
+    
+    mysql_cursor = sql.cursor()
+    
+    # check inputs
+    
+    # checks table
+    query_values = fetch_all("show tables;") # returns tuples
+    query_values_list = list()
+    for x in query_values:
+        query_values_list.append(x[0])
+        
+    if table not in query_values_list: # if url value not in available tables  
+        return query_fail_response(format, "Unknown URL, double check. ",404)
+    
+    # checks column
+    if column != "":
+        query_values = fetch_all(f"DESCRIBE {table};") # tuple
+        query_values_list = list()
+        for x in query_values:
+            query_values_list.append(x[0])
+        
+        if column not in query_values_list:
+            mysql_cursor.close()
+            return query_fail_response(format,"Invalid Field Name.",400)
+        
+    elif column == "" and search != "":
+        return query_fail_response(format, "Tried to search but no specified field.",400)
+    
+    # checks page
+    if(int(page) < 1):
+        page = 1
+        
+    offset = (int(page) - 1) * 20
+    
+    query_results = fetch_all(read_query(table,column,search,offset))
+    
+    mysql_cursor.close()
+    return make_response(jsonify(query_results),200)
+
+@app.route("/<string:table>/update",methods=["POST"])
+def update(table):
+    id = request.args.get('id')
+
+    format = request.args.get('format',default="json")
+    info = format_get(format) # input request
+
+    if str(info).__contains__("400 BAD REQUEST"):
+        return info
+    
+    if id == None:
+        return query_fail_response(format, "ID was not specified",400)
+    
+    mysql_cursor = sql.cursor()
+    
+    query_values = fetch_all("show tables;") # returns tuples
+    query_values_list = list()
+    for x in query_values:
+        query_values_list.append(x[0])
+        
+    if table not in query_values_list:
+        mysql_cursor.close()
+        
+        return query_fail_response(format, "Unknown URL, double check. ",404)
+    
+    id_query = fetch_all(f"DESCRIBE {table};")
+    id_name = id_query[0][0] # assumes the primary id name is always first
+    
+    mysql_cursor.execute(update_query(table,info,id,id_name))
+    
+    sql.commit()
+    rows_affected = mysql_cursor.rowcount
+    mysql_cursor.close()
+    
+    return rows_affected_response(rows_affected,200,400)
+
+@app.route("/<string:table>/delete",methods=["GET"])
+def delete(table):
+    id = request.args.get('id',default="")
+    
+    if id == "":
+        return query_fail_response(format, "ID was not specified",400)
+    
+    mysql_cursor = sql.cursor()
+    
+    query_values = fetch_all("show tables;") # returns tuples
+    query_values_list = list()
+    for x in query_values:
+        query_values_list.append(x[0])
+        
+    if table not in query_values_list:
+        mysql_cursor.close()
+        
+        return query_fail_response(format, "Unknown URL, double check. ",404)
+    
+    id_query = fetch_all(f"DESCRIBE {table};")
+    id_name = id_query[0][0] # assumes the primary id name is always first
+    
+    mysql_cursor.execute(delete_query(table,id,id_name))
+    
+    sql.commit()
+    rows_affected = mysql_cursor.rowcount
+    mysql_cursor.close()
+    
+    return rows_affected_response(rows_affected,200,400)
+
 """ -- Misc -- """
 
 @app.route("/")
-def hello_world():
+def project_intro():
     return "<p>CSE Final Drill Project, add to url: /cars/, /models/, /manufacturer/</p>"
 
 def fetch_all(query): # fetches all values from a query
@@ -42,36 +189,35 @@ def format_response():
         ),
         400)
 
-def query_fail_response(format):
-    msg = {"message": "Query error, json must contain all columns"}
+def query_fail_response(format,message,code_fail): # add parameter message
     if format == "json":
         response = make_response(
             jsonify(
-                msg
+                {"message": f"{message}"}
                 ),
-            400)
+            code_fail)
     else:
         response = make_response(
             dict2xml(
-                msg
+                {"message": f"{message}"}
                 ),
-            400)
+            code_fail)
         
     return response
 
-def rows_affected_response(rows_affected):
+def rows_affected_response(rows_affected,code_success,code_fail):
     if rows_affected < 1: 
         response = make_response(
             jsonify(
                 {"message": "Action Failed.", "rows_affected": rows_affected}
                 ),
-            400)
+            code_success)
     else:
         response = make_response(
             jsonify(
                 {"message": "Action Successful.", "rows_affected": rows_affected}
                 ),
-            200)
+            code_fail)
     return response
 
 
@@ -90,318 +236,7 @@ def format_get(format):
 
 """ -- Misc -- """
 
-""" -- Manufacturers -- """
 
-@app.route("/manufacturers/add",methods=["POST"]) # CREATE, POST
-def add_models(): 
-    mysql_cursor = sql.cursor()
-    
-    format = request.args.get('format',default="json")
-    info = format_get(format)
-
-    if str(info).__contains__("400 BAD REQUEST"):
-        return info
-    
-    try:
-        mysql_cursor.execute(
-            f"""
-            INSERT INTO Manufacturer(name,details)
-            VALUES(
-                "{info['request']['name']}",
-                "{info['request']['details']}"
-            );
-            """
-        )
-    except:
-        return query_fail_response(format)
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    return rows_affected_response(rows_affected)
-
-@app.route("/manufacturers",methods=["GET"]) # READ ALL
-def get_cars():
-    page = request.args.get('page', default=1)
-    
-    if(int(page) < 1):
-        page = 1
-        
-    offset = (int(page) - 1) * 20
-    
-    query_results = fetch_all(f"SELECT * FROM Manufacturer LIMIT 20 OFFSET {offset};")
-    return make_response(jsonify(query_results),200)
-
-@app.route("/manufacturers/search",methods=["GET"]) # name search
-def search_cars():
-    search = request.args.get('license',default="")
-    
-    mysql_cursor = sql.cursor()
-    
-    query_results = fetch_all(f"SELECT * FROM Manufacturer WHERE name LIKE '%{search}%';")
-    mysql_cursor.close()
-    
-    return make_response(jsonify(query_results),200)
-    
-
-@app.route("/manufacturers/update", methods=["POST"]) # UPDATE
-def update_cars():
-    id = request.args.get('id') # ?id=<int>
-    
-    mysql_cursor = sql.cursor()
-    
-    format = request.args.get('format',default="json")
-    info = format_get(format)
-
-    if str(info).__contains__("400 BAD REQUEST"):
-        return info
-    
-    try:
-        mysql_cursor.execute(
-            f"""
-            UPDATE Manufacturer SET
-            name = {info['request']['name']},
-            details = "{info['request']['details']}"
-            WHERE idManufacturer = {id};
-            """
-        )
-    except:
-        return query_fail_response(format)
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    return rows_affected_response(rows_affected)
-
-
-@app.route("/manufacturers/delete", methods=["GET"])
-def delete_cars():
-    id = request.args.get('id', default=0)
-    mysql_cursor = sql.cursor()
-    mysql_cursor.execute(f"DELETE FROM Manufacturer where idManufacturer = {id} ")
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    rows_affected_response(rows_affected)
-    
-""" -- Manufacturers -- """
-
-
-""" -- Models -- """
-
-@app.route("/models/add",methods=["POST"]) # CREATE, POST
-def add_models(): 
-    mysql_cursor = sql.cursor()
-    
-    format = request.args.get('format',default="json")
-    info = format_get(format)
-
-    if str(info).__contains__("400 BAD REQUEST"):
-        return info
-    
-    try:
-        mysql_cursor.execute(
-            f"""
-            INSERT INTO model(Manufacturer_idManufacturer,model_code,daily_hire_rate,name)
-            VALUES(
-                {info['car_data']['Manufacturer_idManufacturer']},
-                "{info['car_data']['model_code']}",
-                {info['car_data']['daily_hire_rate']},
-                "{info['car_data']['name']}"
-            );
-            """
-        )
-    except:
-        return query_fail_response(format)
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    return rows_affected_response(rows_affected)
-
-@app.route("/models",methods=["GET"]) # READ ALL
-def get_cars():
-    page = request.args.get('page', default=1)
-    
-    if(int(page) < 1):
-        page = 1
-        
-    offset = (int(page) - 1) * 20
-    
-    query_results = fetch_all(f"SELECT * FROM model LIMIT 20 OFFSET {offset};")
-    return make_response(jsonify(query_results),200)
-
-@app.route("/models/search",methods=["GET"]) # name search
-def search_cars():
-    search = request.args.get('license',default="")
-    
-    mysql_cursor = sql.cursor()
-    
-    query_results = fetch_all(f"SELECT * FROM model WHERE name LIKE '%{search}%';")
-    mysql_cursor.close()
-    
-    return make_response(jsonify(query_results),200)
-    
-
-@app.route("/models/update", methods=["POST"]) # UPDATE
-def update_cars():
-    id = request.args.get('id') # ?id=<int>
-    
-    mysql_cursor = sql.cursor()
-    
-    format = request.args.get('format',default="json")
-    info = format_get(format)
-
-    if str(info).__contains__("400 BAD REQUEST"):
-        return info
-    
-    try:
-        mysql_cursor.execute(
-            f"""
-            UPDATE model SET
-            Manufacturer_idManufacturer = {info['request']['Manufacturer_idManufacturer']},
-            model_code = "{info['request']['model_code']}",
-            daily_hire_rate = {info['request']['daily_hire_rate']},
-            name = {info['request']['name']}
-            WHERE idmodel = {id};
-            """
-        )
-    except:
-        return query_fail_response(format)
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    return rows_affected_response(rows_affected)
-
-
-@app.route("/models/delete", methods=["GET"])
-def delete_cars():
-    id = request.args.get('id', default=0)
-    mysql_cursor = sql.cursor()
-    mysql_cursor.execute(f"DELETE FROM model where idmodel = {id} ")
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    rows_affected_response(rows_affected)
-    
-""" -- Models -- """
-
-
-""" -- Cars -- """
-
-@app.route("/cars/add",methods=["POST"]) # CREATE, POST
-def add_cars(): 
-    mysql_cursor = sql.cursor()
-    
-    format = request.args.get('format',default="json")
-    info = format_get(format)
-
-    if str(info).__contains__("400 BAD REQUEST"):
-        return info
-    
-    try:
-        mysql_cursor.execute(
-            f"""
-            INSERT INTO car(model_idmodel,license_num,cur_mileage,engine_size,other_car_details)
-            VALUES(
-                {info['request']['model_idmodel']},
-                "{info['request']['license_num']}",
-                {info['request']['cur_mileage']},
-                {info['request']['engine_size']},
-                "{info['request']['other_car_details']}"
-            );
-            """
-        )
-    except:
-        return query_fail_response(format)
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    return rows_affected_response(rows_affected)
-
-@app.route("/cars",methods=["GET"]) # READ ALL
-def get_cars():
-    page = request.args.get('page', default=1)
-    
-    if(int(page) < 1):
-        page = 1
-        
-    offset = (int(page) - 1) * 20
-    
-    query_results = fetch_all(f"SELECT * FROM car LIMIT 20 OFFSET {offset};")
-    return make_response(jsonify(query_results),200)
-
-@app.route("/cars/search",methods=["GET"]) # license num search
-def search_cars():
-    search = request.args.get('license',default="")
-    
-    mysql_cursor = sql.cursor()
-    
-    query_results = fetch_all(f"SELECT * FROM car WHERE license_num LIKE '%{search}%';")
-    mysql_cursor.close()
-    
-    return make_response(jsonify(query_results),200)
-    
-
-
-@app.route("/cars/update", methods=["POST"]) # UPDATE
-def update_cars():
-    id = request.args.get('id') # ?id=<int>
-    
-    mysql_cursor = sql.cursor()
-    
-    format = request.args.get('format',default="json")
-    info = format_get(format)
-
-    if str(info).__contains__("400 BAD REQUEST"):
-        return info
-    
-    try:
-        mysql_cursor.execute(
-            f"""
-            UPDATE car SET
-            model_idmodel = {info['request']['model_idmodel']},
-            license_num = "{info['request']['license_num']}",
-            cur_mileage = {info['request']['cur_mileage']},
-            engine_size = {info['request']['engine_size']},
-            other_car_details = "{info['request']['other_car_details']}"
-            WHERE idcar = {id};
-            """
-        )
-    except:
-        return query_fail_response(format)
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    return rows_affected_response(rows_affected)
-
-
-@app.route("/cars/delete", methods=["GET"])
-def delete_cars():
-    id = request.args.get('id', default=0)
-    mysql_cursor = sql.cursor()
-    mysql_cursor.execute(f"DELETE FROM car where idcar = {id} ")
-    
-    sql.commit()
-    rows_affected = mysql_cursor.rowcount
-    mysql_cursor.close()
-    
-    rows_affected_response(rows_affected)
-    
-""" -- Cars -- """
 
 if __name__ == "__main__":
     app.run(debug=True)
