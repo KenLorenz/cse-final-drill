@@ -4,7 +4,7 @@ import jwt
 from functools import wraps
 import xmltodict
 from dict2xml import dict2xml
-from query import *
+# from query import *
 from faker import Faker
 
 # Manufacturer can't be deleted if related to model, model can't be deleted if related to cars, cars can be deleted immediately.
@@ -103,8 +103,34 @@ def create(table):
         
         return query_response(format, "Unknown URL, double check. ",404)
     
-    # phase 2: execute query
-    mysql_cursor.execute(create_query(table,info))
+    # phase 2: create & execute query
+    query = f"INSERT INTO {table}("
+    
+    column = list()
+    row = list()
+    for keys, values in info['request'].items():
+        column.append(keys)
+        row.append(values)
+
+    for x in range(0,len(column)): # column
+        query += column[x]
+        
+        if(x != len(column) - 1):
+            query += ","
+            
+    query += ")"
+            
+    query += "VALUES("
+    for x in range(0,len(row)):
+        
+        query += f'"{row[x]}"'
+            
+        if(x != len(column) - 1):
+            query += ","
+            
+    query += ");"
+    
+    mysql_cursor.execute(query)
     
     # phase 3: apply query and return response
     sql.commit()
@@ -157,7 +183,12 @@ def read(table):
         
     offset = (int(page) - 1) * 20
     
-    query_results = fetch_all(read_query(table,column,search,offset))
+    if column != "":
+        query = f"SELECT * FROM {table} WHERE {column} LIKE '%{search}%' LIMIT 20 OFFSET {offset};"
+    else:
+        query = f"SELECT * FROM {table} LIMIT 20 OFFSET {offset};"
+        
+    query_results = fetch_all(query)
     
     mysql_cursor.close()
     return make_response(jsonify(query_results),200)
@@ -194,7 +225,24 @@ def update(table):
     id_query = fetch_all(f"DESCRIBE {table};")
     id_name = id_query[0][0] # assumes the primary id name is always first
     
-    mysql_cursor.execute(update_query(table,info,id,id_name))
+    query = f"UPDATE {table} SET "
+    
+    column = list()
+    row = list()
+    for keys, values in info['request'].items():
+        column.append(keys)
+        row.append(values)
+    
+    for x in range(0,len(column)):
+        
+        query += f'{column[x]} = "{row[x]}"'
+        
+        if(x != len(column) - 1):
+            query += ","
+            
+    query += f' WHERE {id_name} = "{id}";'
+    
+    mysql_cursor.execute(query)
     
     sql.commit()
     rows_affected = mysql_cursor.rowcount
@@ -228,7 +276,7 @@ def delete(table):
     id_query = fetch_all(f"DESCRIBE {table};")
     id_name = id_query[0][0] # assumes the primary id name is always first
     
-    mysql_cursor.execute(delete_query(table,id,id_name))
+    mysql_cursor.execute(f"DELETE FROM {table} WHERE {id_name} = '{id}'")
     
     sql.commit()
     rows_affected = mysql_cursor.rowcount
