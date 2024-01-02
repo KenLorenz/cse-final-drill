@@ -79,7 +79,7 @@ http://127.0.0.1:5000/cars/add
 
 reading the car table:
 
-http://127.0.0.1:5000/cars?page={insert, optional}
+http://127.0.0.1:5000/cars/read?page=1&search=A&
 
 updating a car:
 
@@ -94,7 +94,6 @@ http://127.0.0.1:5000/cars/update?id={specify id here}&format=json
 }
 
 http://127.0.0.1:5000/cars/update?id={specify id}&format=xml
-
 
 
 <request>
