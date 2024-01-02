@@ -101,5 +101,72 @@ class appTest(unittest.TestCase):
         
         self.assertTrue('"rows_affected":1' in response2.data.decode())
 
+    def test_add_xml(self):
+        url = "http://localhost:5000/login"
+        
+        input = {"email":"kenlorenz420@gmail.com", "password":"122846"}
+        response = self.app.post(url, json=input)
+        response_str = response.data.decode()
+        response_str = response_str.replace('\n','')
+        token = response_str.split("\"")[3]
+
+        url = "http://localhost:5000/car/add?format=xml"
+        
+        input = {"request":{
+            "idcar": 1000000,
+            "model_idmodel": 1,
+            "license_num": "ABC123",
+            "cur_mileage": 12345,
+            "engine_size": 90000,
+            "other_car_details": "TESTING123"
+        }}
+        input = dict2xml(input)
+        header = {'token-access': f'{token}'}
+        
+        response2 = self.app.post(url, data=input, headers=header)
+
+        self.assertTrue('"rows_affected":1' in response2.data.decode())
+
+    def test_aupdate_xml(self): # added a to prioritize
+        url = "http://localhost:5000/login"
+        
+        input = {"email":"kenlorenz420@gmail.com", "password":"122846"}
+        response = self.app.post(url, json=input)
+        response_str = response.data.decode()
+        response_str = response_str.replace('\n','')
+        token = response_str.split("\"")[3]
+
+        url = "http://localhost:5000/car/update?id=1000000&format=xml"
+        
+        input = {"request":{
+            "model_idmodel": 1,
+            "license_num": "ABC123",
+            "cur_mileage": 12345,
+            "engine_size": 90000,
+            "other_car_details": "XMLTESTING"
+        }}
+        input = dict2xml(input)
+        
+        header = {'token-access': f'{token}'}
+        response2 = self.app.post(url, data=input, headers=header)
+
+        self.assertTrue('"rows_affected":1' in response2.data.decode())
+        
+    def test_delete_xml(self):
+        url = "http://localhost:5000/login"
+        
+        input = {"email":"kenlorenz420@gmail.com", "password":"122846"}
+        response = self.app.post(url, json=input)
+        response_str = response.data.decode()
+        response_str = response_str.replace('\n','')
+        token = response_str.split("\"")[3]
+        
+        url = "http://localhost:5000/car/delete?id=1000000"
+        
+        header = {'token-access': f'{token}'}
+        response2 = self.app.get(url, headers=header)
+        
+        self.assertTrue('"rows_affected":1' in response2.data.decode())
+        
 if __name__=="__main__":
     unittest.main()
