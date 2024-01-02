@@ -300,13 +300,6 @@ def fetch_all(query): # fetches all values from a query
     mysql_cursor.close()
     return results
 
-def format_response():
-    return make_response(
-        jsonify(
-            {"message": "Format error. xml and json are the only ones available"} 
-        ),
-        400)
-
 def query_response(format,message,code_fail): # add parameter message
     if format == "json":
         response = make_response(
@@ -348,7 +341,11 @@ def format_get(format):
         info = request.data # xml
         info = xmltodict.parse(info)
     else:
-        return format_response()
+        return make_response(
+        jsonify(
+            {"message": "Format error. xml and json are the only ones available"} 
+        ),
+        400)
     
     return info
 
